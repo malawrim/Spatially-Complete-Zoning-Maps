@@ -1,4 +1,11 @@
-# Use to create bash scripts for all tests for zoning project
+"""
+If running zoning model on HPC, use this script to create bash scripts for all model runs. 
+See generic_zoning_script.py and copy_scripts.py
+
+Output: creates new batch files with filenames that correspond to those listed in test_names
+
+Usage: make_batch.py
+"""
 
 import sys
 import os

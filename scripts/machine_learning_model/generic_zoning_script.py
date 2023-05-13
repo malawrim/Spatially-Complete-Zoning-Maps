@@ -1,46 +1,50 @@
+#!/usr/bin/env python3
+
+"""
+This script trains a Random Forest model and predicts zoning districts. This script can be used to run any of the four models: 
+within-county core districts, within-county sub-districts, between-county core districts, and between-county sub-districts. 
+To change model type copy file (see copy_scripts.py) and provide the type of model (within or between) followed by an 
+underscore "_" and the hierarchy (core or sub districts; e.g., within_sub). If running multiple simulations of the same model 
+(e.g., between-county core districts) append filename with _r* where * is a number corresponding to the run (e.g., 
+between_core_r1.py). To assert train/test split append the train split (numeric) then an underscore "_" followed by the test
+split (e.g., within_core_70_30.py). Default train/test split is 80/20 (no need to specify). Additionally, script returns 
+predicted zones at two extents, one just for the observed data extent, and another for the entire state (NC). To only predict 
+for observed data extent, set NC_extent flag to False.
+
+Output: 
+- class_report.csv report generated from sklearn.metrics.classification_report after random forest is run
+- conf_mat.csv confusion matrix from random forest model
+- feature_import.csv feature importance of features (predictors) used to train random forest model
+- pred_zones.tif predicted zones for observed study extent
+- pred_NC.tif predicted zones for State (NC)
+- out_testname.txt (see out_file parameter below) file updates about script progress 
+  (e.g., when model has trained)
+
+Usage: "generic_zoning_script.py
+Note* - not intended for use with name "generic_zoning_script.py" rename following the naming convention listed above.
+"""
+
 import sys
-
-# for distributed mem
-from mpi4py import MPI
-import psutil
-
-# comm = MPI.COMM_WORLD
-
-# rank = comm.Get_rank()
-# cpuNumber = psutil.Process().cpu_num()
-# nodeName = MPI.Get_processor_name()
-
-# let dask and MPI work together
-from dask_mpi import initialize
-
-initialize()
-
-from dask.distributed import Client
-
-import dask.dataframe as dd
-import dask.array as da
-import dask.bag as db
-from dask.array.image import imread
-
-# commenting out for testing stratified train/test split
-# from dask_ml.model_selection import train_test_split
-
-import joblib
-from sklearn.model_selection import train_test_split
-from sklearn.utils import parallel_backend
-
 import glob
 import os
 
-import geopandas as gpd
+from dask_mpi import initialize
+from dask.distributed import Client
+import dask.array as da
+from dask.array.image import imread
+from sklearn.model_selection import train_test_split
+from sklearn.utils import parallel_backend
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.ma as ma
 import rasterio
-from rasterio.plot import show
-
 from sklearn.ensemble import RandomForestClassifier
+
+# initialize dask & MPI
+initialize()
+
+# Set to True to predict for the entire state and not just test extent (obscerved data)
+NC_extent = True
 
 # get file name from which you will determine other variables
 test_name = os.path.basename(__file__).split(".")[0]
@@ -68,14 +72,6 @@ split_per = 0.2
 # if there are more than three entries in test name then it is asserting the train/test split
 if len(test_name_split) == 4:
     split_per = float(test_name_split[3]) / 100
-
-# flag - True if running the model for NC extent
-NC_extent = True
-
-# if there are three entries in test_name then it is one of the random between county tests
-if len(test_name_split) == 3:
-    # flag - True if running the model for NC extent
-    NC_extent = False
 
 # original zones
 og_zone_file = "NC_zones_no_protected.tif"
@@ -123,11 +119,10 @@ def clean_rast(rast):
 
 # Function to reshape the compressed arrays (add back NAs) and visualize
 def visualize(rast, extent):
-    class_prediction_reshape = read_mask(extent)[0].astype(np.float32)
-    class_prediction_reshape[class_prediction_reshape == 1] = np.nan
-    class_prediction_reshape[class_prediction_reshape == 0] = rast
-    # plt.imshow(class_prediction_reshape)
-    return class_prediction_reshape
+    pred_zones_reshape = read_mask(extent)[0].astype(np.float32)
+    pred_zones_reshape[pred_zones_reshape == 1] = np.nan
+    pred_zones_reshape[pred_zones_reshape == 0] = rast
+    return pred_zones_reshape
 
 
 # Helper function to load .tif and stack
@@ -206,49 +201,7 @@ if split_type == "within":
 elif split_type == "between":
     t_stack = t_stack[0].rechunk({0: "auto", 1: t_stack[0].shape[1]})
     t_stack[:, zone_index] = reclass_hierarchy(hierarchy, t_stack[:, zone_index])
-    # avail_county = np.unique(t_stack[:, county_index])
-
-    avail_county = [
-        97,
-        193,
-        179,
-        183,
-        129,
-        63,
-        135,
-        37,
-        85,
-        147,
-        195,
-        191,
-        101,
-        19,
-        133,
-        31,
-        51,
-        119,
-        71,
-        45,
-        105,
-        109,
-        21,
-        159,
-        57,
-        151,
-        59,
-        81,
-        67,
-        41,
-        197,
-        53,
-        89,
-        157,
-        39,
-        87,
-        189,
-        25,
-        55,
-    ]
+    avail_county = np.unique(t_stack[:, county_index])
 
     county_test = np.random.choice(
         avail_county, size=round(len(avail_county) * split_per), replace=False
@@ -266,10 +219,6 @@ elif split_type == "between":
     test_features.compute_chunk_sizes()
 
     # separate zone labels and predictors
-    # train_labels = reclass_hierarchy(hierarchy, train_features[:, zone_index])
-    # test_labels = reclass_hierarchy(hierarchy, test_features[:, zone_index])
-
-    # separate zone labels and predictors
     train_labels = train_features[:, zone_index]
     test_labels = test_features[:, zone_index]
 
@@ -281,7 +230,6 @@ elif split_type == "between":
     # delete county and zone layers from array
     train_features = np.delete(train_features.compute(), zone_index, 1)
     test_features = np.delete(test_features.compute(), zone_index, 1)
-    # keeping in county to see
     train_features = np.delete(train_features, county_index, 1)
     test_features = np.delete(test_features, county_index, 1)
 
@@ -313,16 +261,6 @@ with parallel_backend("dask"):
         max_features=6,
         n_jobs=16,
     )
-
-    # if running balanced
-    # rf = RandomForestClassifier(
-    #     n_estimators=100,
-    #     random_state=42,
-    #     max_depth=25,
-    #     max_features=6,
-    #     n_jobs=16,
-    #     class_weight="balanced",
-    # )
 
 df = pd.DataFrame(test_labels.compute())
 df.to_csv("test_labels.csv", header=False, index=False)
@@ -358,7 +296,7 @@ df = pd.DataFrame(report).transpose()
 
 # add R2 to dataframe
 df.loc[len(df.index)] = [r2, r2, r2, r2]
-df.to_pickle(os.path.join(output_file_path, "class_report.pkl"))
+# df.to_pickle(os.path.join(output_file_path, "class_report.pkl"))
 df.to_csv(os.path.join(output_file_path, "class_report.csv"))
 send_update("classification report written\n")
 
@@ -366,46 +304,46 @@ send_update("classification report written\n")
 from sklearn.metrics import confusion_matrix
 
 conf_mat = confusion_matrix(test_labels, class_prediction)
-with open(os.path.join(output_file_path, "conf_mat.npy"), "wb") as f:
-    np.save(f, conf_mat)
+# with open(os.path.join(output_file_path, "conf_mat.npy"), "wb") as f:
+#     np.save(f, conf_mat)
 df = pd.DataFrame(conf_mat)
 df.to_csv(os.path.join(output_file_path, "conf_mat.csv"))
-
-# predict for whole study area
-whole_class_prediction = rf.predict(t_stack)
-with open(os.path.join(output_file_path, "whole_class_pred.npy"), "wb") as f:
-    np.save(f, whole_class_prediction)
 
 # Get numerical feature importances
 importances = rf.feature_importances_
 
-# band names
-with open(os.path.join(output_file_path, "feature_import.npy"), "wb") as f:
-    np.save(f, importances)
+# with open(os.path.join(output_file_path, "feature_import.npy"), "wb") as f:
+#     np.save(f, importances)
 
 df = pd.DataFrame(importances)
 df.to_csv(os.path.join(output_file_path, "feature_import.csv"))
 
+# predict for whole study area
+pred_zones = rf.predict(t_stack)
+# with open(os.path.join(output_file_path, "pred_zones.npy"), "wb") as f:
+#     np.save(f, pred_zones)
+
 # get predicted layer with NAs put back in
-class_prediction_reshape = visualize(whole_class_prediction, "county")
+pred_zones_reshape = visualize(pred_zones, "county")
 
 # write output to tif
 kwargs = rasterio.open(os.path.join(input_file_path, og_zone_file)).meta
 kwargs.update(dtype=rasterio.float32, count=1, compress="lzw")
 
+# Write predicted zones to raster (.tif)
 with rasterio.open(
     os.path.join(output_file_path, "pred_zones.tif"), "w", **kwargs
 ) as dst:
-    dst.write_band(1, class_prediction_reshape.astype(rasterio.float32))
+    dst.write_band(1, pred_zones_reshape.astype(rasterio.float32))
 
 # get NC scale data
 if NC_extent == True:
-    # clean up
+    # clean up - remove unused data
     del t_stack
     del test_features
     del test_labels
-    del whole_class_prediction
-    del class_prediction_reshape
+    del pred_zones
+    del pred_zones_reshape
 
     # Preprocessing function for stacking images using imread
     # write over clean_rast function with new extent
@@ -437,11 +375,12 @@ if NC_extent == True:
     NC_stack = NC_stack[0].rechunk({0: "auto", 1: NC_stack[0].shape[1]})
     send_update("NC_stack rechunked")
 
+    # predict for NC
     NC_prediction = rf.predict(NC_stack)
     send_update("NC_stack predicted")
 
-    with open(os.path.join(output_file_path, "NC_pred.npy"), "wb") as f:
-        np.save(f, NC_prediction)
+    # with open(os.path.join(output_file_path, "NC_pred.npy"), "wb") as f:
+    #     np.save(f, NC_prediction)
 
     # get layer for all of NC with NAs put back in
     NC_prediction_reshape = visualize(NC_prediction, "NC")

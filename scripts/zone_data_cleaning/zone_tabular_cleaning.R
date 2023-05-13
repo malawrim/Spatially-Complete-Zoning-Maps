@@ -1,9 +1,18 @@
-# Data cleaning for zoning classes
+## ---------------------------
+##
+## Script name: zone_tabular_cleaning.R
+##
+## Purpose of script: Cleaning tabular zoning data for merging with spatial data
+## Called by zone_cleaning.R
+## 
+## zone_desc must be in this format: https://docs.google.com/spreadsheets/d/1VTPvUM-_gQwGZUdfe8UDHM0Eoy0BVdV47sQxAIHgVJk/edit?usp=sharing
+##
+## Author: Margaret A Lawrimore
+## Email: malawrim@ncsu.edu
+##
+## ---------------------------
 
-# required make sure zone desc is in required format
-# See description file https://docs.google.com/spreadsheets/d/1VTPvUM-_gQwGZUdfe8UDHM0Eoy0BVdV47sQxAIHgVJk/edit?usp=sharing
-
-# if you don't have the libraries
+# Install Libraries
 # install.packages("data.table")
 # install.packages("sp")
 # install.packages("tmap")
@@ -25,8 +34,6 @@ which_zone <- function(zone_desc, zone_classes, zone_dict) {
     }
   }
   return("Other")
-  # length(zone_dict$get("Residential"))
-  # return(grepl(zone, zone_desc, ignore.case = T))
 }
 
 # Function to find matching residential class
@@ -84,10 +91,6 @@ zone_tabular_cleaning <- function(messy_data) {
   zone_dict <- dict(init_keys = zone_classes, init_values = zone_search)
   res_dict <- dict(init_keys = res_classes, init_values = res_search)
   
-  # zone_dict$keys()
-  # zone_dict$values()
-  # grepl(zone_dict$get("Agriculture"), "Residential")
-  
   # make copy for assigning new zone ID
   clean_data <- messy_data
 
@@ -99,7 +102,6 @@ zone_tabular_cleaning <- function(messy_data) {
   clean_data$`Density_of_Land_Use` <- gsub("No Minimum", "", clean_data$`Density_of_Land_Use`)
   clean_data$`Density_of_Land_Use` <- as.integer(clean_data$`Density_of_Land_Use`)
   # for each row in the original data assign new Zone ID
-  # set_zone <- function(clean_data, which_zone, zone_classes, zone_dict, which_res, res_dict) {
   foreach(x = 1:nrow(clean_data), .combine=list) %do% {
     clean_data[x, c("NewZn")] <- which_zone(clean_data[x, `Zone_Name`], zone_classes, zone_dict)
     # If not matched check the long description
@@ -110,11 +112,6 @@ zone_tabular_cleaning <- function(messy_data) {
       clean_data[x, c("NewZn")] <- which_res(clean_data[x, `Zone_Name`], clean_data[x, `Density_of_Land_Use`], res_dict)
     }
   }
-  # cl <- parallel::makeCluster(cores)
-  # registerDoParallel(cl)
-  # clusterExport(cl, varlist=c("clean_data", "which_zone", "zone_classes", "zone_dict",  "which_res", "res_dict"), envir=environment())
-  # clean_data <- set_zone(clean_data, which_zone, zone_classes, zone_dict,  which_res, res_dict)
-  # stopCluster(cl)
   
   # Join Zone IDs to new Zone Names
   new_zn_id <- fread(paste(file_location, "Zone_Classification.csv", sep="\\"))

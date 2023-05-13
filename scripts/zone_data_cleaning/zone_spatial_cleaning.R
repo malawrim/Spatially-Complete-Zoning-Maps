@@ -1,3 +1,16 @@
+## ---------------------------
+##
+## Script name: zone_spatial_cleaning.R
+##
+## Purpose of script: Cleaning spatial zoning data for merging with tabular data
+## Called by zone_cleaning.R
+## 
+##
+## Author: Margaret A Lawrimore
+## Email: malawrim@ncsu.edu
+##
+## ---------------------------
+
 library(data.table)
 library(sp)
 library(rgdal)
@@ -6,10 +19,9 @@ zone_spatial_cleaning <- function(spatial_county, tabular) {
   
   spatial_clean <- list()
   # For each municipality
-  for ( k in 1:length(spatial_county$keys())) {
+  for (k in 1:length(spatial_county$keys())) {
 
     spatial <- spatial_county$get(spatial_county$keys()[[k]])
-    # jurisdiction <- unlist(strsplit(spatial_county$keys()[[k]], "_"))[[1]]
     
     # find column with zone ID
     zone_id_col <- 0
@@ -41,9 +53,6 @@ zone_spatial_cleaning <- function(spatial_county, tabular) {
     }
     colnames(spatial@data)[zone_id_col] <- "Zone_ID"
 
-    # remove NA's based on value in one column
-    # subset(spatial@data, !is.na(spatial@data[,i]))
-    
     # print original shapefile map
     tryCatch(
       expr = {
@@ -113,9 +122,9 @@ zone_spatial_cleaning <- function(spatial_county, tabular) {
     spatial@data$Zone_ID <- gsub(" ", "", spatial@data$Zone_ID)
     
     # for conditional districts remove conditional flag from zone id
-    # -C
     # remove anything within parenthesis 
     spatial@data$Zone_ID <- gsub("\\s*\\([^\\)]+\\)","",spatial@data$Zone_ID)
+    # Remove commonly used conditional abbreviations
     spatial@data$Zone_ID <- gsub("-CZD", "",gsub("/CD", "", gsub("CUP", "", spatial@data$Zone_ID)))
     spatial@data$Zone_ID <- gsub("CZ-", "", gsub("-CZ", "", gsub("/CZ", "", gsub("-CU", "", gsub("CU-", "", gsub("CUD-", "",  gsub("CUR-", "", gsub("-CUR", "", gsub("-CD", "", gsub("CD-", "", gsub("-SUP", "",  gsub("-SUD", "",  gsub("_CU", "", spatial@data$Zone_ID)))))))))))))
     spatial@data$Zone_ID <- gsub("CD", "", gsub("CZ", "", gsub("CU", "", spatial@data$Zone_ID)))
@@ -138,7 +147,6 @@ zone_spatial_cleaning <- function(spatial_county, tabular) {
         # zones in tabular but not in spatial
         tab_not_merged <- setdiff(unique(tabular[Jurisdiction %in% unique(spatial@data$Jurisdiction)]$Zone_ID), unique(as.data.table(spatial@data)[Jurisdiction %in% unique(tabular$Jurisdiction)]$Zone_ID))
         cat(current_county, ": ", length(tab_not_merged), " zone(s) in tabular but not in spatial: ", tab_not_merged, "\n", file="spatial_merge_warnings.txt",append=TRUE)
-        # print(paste(length(tab_not_merged), " zone(s) in tabular but not in spatial: "))
         # print.table(tab_not_merged)
         # in spatial but no in tabular
         spat_not_merged <- setdiff(unique(as.data.table(spatial@data)[Jurisdiction %in% unique(tabular$Jurisdiction)]$Zone_ID), unique(tabular[Jurisdiction %in% unique(spatial@data$Jurisdiction)]$Zone_ID))

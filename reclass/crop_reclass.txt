@@ -1,0 +1,3 @@
+0 thru 92 = 1 agriculture
+111 thru 195 = 0
+205 thru 254 = 1 agriculture

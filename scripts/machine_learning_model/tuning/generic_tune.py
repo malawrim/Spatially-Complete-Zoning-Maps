@@ -1,43 +1,42 @@
-import sys
+#!/usr/bin/env python3
 
-# for distributed mem
-from mpi4py import MPI
-import psutil
+"""
+This script conducts cross-validation tuning of random forest hyperparameters. Change parameters
+to be tuned and values to be tested using the param_grid attribute below. Current implementation
+tests max_depth (tree depth), max_features (number of features to consider when splitting), and 
+n_estimators (number of trees). 
 
-# comm = MPI.COMM_WORLD
+Rename file to test different models: within-county core districts, within-county sub-districts, 
+between-county core districts, and between-county sub-districts. Copy file (see copy_scripts.py) 
+and provide the type of model (within or between) followed by an underscore "_" and the hierarchy 
+(core or sub districts). Final script name could be: within_sub_tune.py, within_core_tune.py, 
+between_sub_tune.py, or between_core_tune.py.
 
-# rank = comm.Get_rank()
-# cpuNumber = psutil.Process().cpu_num()
-# nodeName = MPI.Get_processor_name()
+Output:
+- tuning_results.csv file displaying results of parameter tuning
+- out_filename.txt (see out_file parameter below) file updates about script progress 
+  (e.g., when model has trained)
 
-# let dask and MPI work together
-from dask_mpi import initialize
-
-initialize()
-
-from dask.distributed import Client
-
-import dask.dataframe as dd
-import dask.array as da
-import dask.bag as db
-from dask.array.image import imread
-from dask_ml.model_selection import train_test_split
-
-import joblib
-from sklearn.utils import parallel_backend
+Usage: generic_tune.py 
+(*Note - not intended for use with current file name. Rename using convetion described above)
+"""
 
 import glob
 import os
 
-import geopandas as gpd
+from dask_mpi import initialize
+from dask.distributed import Client
+import dask.array as da
+from dask.array.image import imread
+from sklearn.model_selection import train_test_split
+from sklearn.utils import parallel_backend
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.ma as ma
 import rasterio
-from rasterio.plot import show
-
 from sklearn.ensemble import RandomForestClassifier
+
+initialize()
 
 # get file name from which you will determine other variables
 test_name = os.path.basename(__file__).split(".")[0]
@@ -65,11 +64,19 @@ if len(test_name_split) == 4:
 # original zones
 og_zone_file = "NC_zones_no_protected.tif"
 
+param_grid = {
+    "random_state": [42],
+    "max_depth": [10, 25, 50],
+    "max_features": [4, 5, 6, 7],
+    "n_estimators": [50, 100, 250],
+}
+
 # number of tasks
 tasks = 16
 
 # set folder path
 file_path = os.path.join(os.getcwd(), "pred")
+
 
 # Helper function for testing - print statements to output file
 def send_update(statement):
@@ -138,6 +145,7 @@ zones = imread(os.path.join(file_path, og_zone_file), preprocess=clean_rast)
 # stack rasters along correct axis
 t_stack = da.stack(rast_list, axis=2)
 # t_stack = t_stack[0].rechunk({0: "auto", 1: t_stack[0].shape[1]})
+
 
 # function for reclassifying zones based on chosen hierarchy level
 def reclass_hierarchy(hierarchy, reclass):
@@ -211,18 +219,7 @@ from sklearn.model_selection import GridSearchCV
 
 # Create the parameter grid based on the results of random search
 # testing really short version to see how long it takes and if it works
-param_grid = {
-    "random_state": [42],
-    "max_depth": [10, 25],
-    "max_features": [5, 6],
-    "n_estimators": [50],
-}
-# param_grid = {
-#     "random_state": [42],
-#     "max_depth": [10, 25, 50],
-#     "max_features": [4, 5, 6, 7],
-#     "n_estimators": [50, 100, 250],
-# }
+
 # Instantiate the grid search model
 grid_search = GridSearchCV(
     estimator=rf, param_grid=param_grid, cv=3, n_jobs=16, verbose=2

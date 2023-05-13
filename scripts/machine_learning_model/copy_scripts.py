@@ -1,17 +1,17 @@
-# Use to duplicate the generic script for all necessary tests
+#!/usr/bin/env python3
 
+"""
+Use to duplicate the generic_zoning_script.py for all necessary model iterations.
+
+Output: Creates new python files with filenames that correspond to those listed in test_names
+
+Usage: copy_scripts.py
+"""
 import shutil
 
 test_names = [
-    "between_core_low",
-    "between_sub_low",
-    "between_core_high",
-    "between_sub_high",
     "within_core",
     "within_sub",
-    "within_sub_80_20",
-    "within_sub_50_50",
-    "within_sub_20_80",
     "between_core_r1",
     "between_core_r2",
     "between_core_r3",
