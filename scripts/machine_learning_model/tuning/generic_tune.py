@@ -9,7 +9,7 @@ n_estimators (number of trees).
 Rename file to test different models: within-county core districts, within-county sub-districts, 
 between-county core districts, and between-county sub-districts. Copy file (see copy_scripts.py) 
 and provide the type of model (within or between) followed by an underscore "_" and the hierarchy 
-(core or sub districts). Final script name could be: within_sub_tune.py, within_core_tune.py, 
+(core or sub-districts). Final script name could be: within_sub_tune.py, within_core_tune.py, 
 between_sub_tune.py, or between_core_tune.py.
 
 Output:
@@ -18,7 +18,7 @@ Output:
   (e.g., when model has trained)
 
 Usage: generic_tune.py 
-(*Note - not intended for use with current file name. Rename using convetion described above)
+(*Note - not intended for use with current file name. Rename using convention described above)
 """
 
 import glob
